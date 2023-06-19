@@ -2,6 +2,171 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:sqflite/sqflite.dart';
+import 'package:path/path.dart';
+
+
+class DatabaseHelper {
+  static Database? _database;
+  static const String tableName = 'bookmarks';
+
+  Future<Database> get database async {
+    if (_database != null) return _database!;
+
+    _database = await initializeDatabase();
+    return _database!;
+  }
+
+  Future<Database> initializeDatabase() async {
+    final String path = await getDatabasesPath();
+    final String dbPath = join(path, 'bookmarks.db');
+
+    return await openDatabase(
+      dbPath,
+      version: 1,
+      onCreate: (Database db, int version) async {
+        await db.execute('''
+          CREATE TABLE $tableName (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            datetime TEXT,
+            earningPerMonth INTEGER,
+            investWaitMonths INTEGER,
+            program TEXT,
+            notes TEXT
+          )
+        ''');
+      },
+    );
+  }
+
+  Future<int> insertBookmark(Map<String, dynamic> bookmark) async {
+    final Database db = await database;
+    return await db.insert(tableName, bookmark);
+  }
+
+  Future<List<Map<String, dynamic>>> getBookmarks() async {
+    final Database db = await database;
+    return await db.query(tableName);
+  }
+}
+
+class _CarInvestAppState extends State<CarInvestApp> {
+  final TextEditingController earningController = TextEditingController();
+  final TextEditingController loanDurationController = TextEditingController();
+  List<Car> cars = [];
+  String result = '';
+  List<Map<String, dynamic>> bookmarks = [];
+  final dbHelper = DatabaseHelper();
+
+  @override
+  void initState() {
+    super.initState();
+    fetchBookmarks();
+  }
+
+  void fetchBookmarks() async {
+    final List<Map<String, dynamic>> bookmarkList = await dbHelper.getBookmarks();
+    setState(() {
+      bookmarks = bookmarkList;
+    });
+  }
+
+  void calculateReinvest() {
+    // Remaining code of calculateReinvest method remains the same
+
+    final Map<String, dynamic> bookmark = {
+      'datetime': DateTime.now().toString(),
+      'earningPerMonth': int.parse(earningController.text),
+      'investWaitMonths': int.parse(loanDurationController.text),
+      'program': 'reinvest_car',
+      'notes': '',
+    };
+
+    dbHelper.insertBookmark(bookmark);
+    fetchBookmarks();
+  }
+
+  // Remaining code of the _CarInvestAppState class remains the same
+  @override
+Widget build(BuildContext context) {
+  return MaterialApp(
+    home: DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text('Car Invest App'),
+          bottom: TabBar(
+            tabs: [
+              Tab(text: 'Calculator'),
+              Tab(text: 'Bookmarks'),
+            ],
+          ),
+        ),
+        body: TabBarView(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextFormField(
+                    controller: earningController,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      labelText: 'Earnings for the month',
+                    ),
+                  ),
+                  TextFormField(
+                    controller: loanDurationController,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      labelText: 'Loan duration',
+                    ),
+                  ),
+                  ElevatedButton(
+                    onPressed: () {
+                      setState(calculateReinvest);
+                    },
+                    child: Text('Calculate'),
+                  ),
+                  SizedBox(height: 16),
+                  Text(
+                    'Result:',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(result),
+                ],
+              ),
+            ),
+            ListView.builder(
+              itemCount: bookmarks.length,
+              itemBuilder: (context, index) {
+                final bookmark = bookmarks[index];
+                return ListTile(
+                  title: Text('Bookmark ${index + 1}'),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Earning per month: ${bookmark['earningPerMonth']}'),
+                      Text('Invest wait months: ${bookmark['investWaitMonths']}'),
+                      Text('Program: ${bookmark['program']}'),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+}
+
+
 
 class Car {
   final int id;
